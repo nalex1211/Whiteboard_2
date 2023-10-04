@@ -1,0 +1,80 @@
+﻿@page
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whiteboard</title>
+</head>
+<body>
+
+    <canvas id="whiteboardCanvas" width="800" height="600" style="border:1px solid black;"></canvas>
+
+    @{
+        var signalrURL = "https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.js";
+    }
+    <script src="@signalrURL"></script>
+
+
+    <script>
+        const canvas = document.getElementById('whiteboardCanvas');
+        const ctx = canvas.getContext('2d');
+        let drawing = false;
+
+        canvas.addEventListener('mousedown', () => { drawing = true; });
+        canvas.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
+        canvas.addEventListener('mousemove', draw);
+
+        function draw(event) {
+            if (!drawing) return;
+
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'black';
+
+            ctx.lineTo(event.clientX - canvas.offsetLeft, event.clientY - canvas.offsetTop);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(event.clientX - canvas.offsetLeft, event.clientY - canvas.offsetTop);
+
+            let data = {
+                x: event.clientX - canvas.offsetLeft,
+                y: event.clientY - canvas.offsetTop
+            };
+            connection.invoke("SendDrawing", data).catch(err => console.error(err.toString()));
+
+        }
+
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/whiteboardHub")
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+
+        connection.on("ReceiveDrawing", (data) => {
+            ctx.lineTo(data.x, data.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(data.x, data.y);
+        });
+
+        connection.onclose(async () => {
+            await start();
+        });
+
+        async function start() {
+            try {
+                await connection.start();
+            } catch (err) {
+                console.log(err);
+                setTimeout(() => start(), 5000);
+            }
+        }
+
+        start();
+
+    </script>
+
+</body>
+</html>
